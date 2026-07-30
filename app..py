@@ -1,787 +1,787 @@
-import streamlit as st
-import os
-import pandas as pd
 from datetime import datetime
-import hashlib
-from io import BytesIO
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+import os
+import streamlit as st
 
-# --- CONFIGURATION DE LA PAGE ---
+# Configuration de la page
 st.set_page_config(
-    page_title="E-243 KISANGANI - Marketplace Pro",
-    layout="wide",
-    page_icon="🛍️"
+    page_title="E-243 KISANGANI", page_icon="🛍️", layout="wide"
 )
 
-# Fichiers de données
+# Style aux couleurs du drapeau de la RDC (Bleu, Jaune, Rouge)
+st.markdown(
+    """
+    <style>
+    .titre-rdc {
+        background: linear-gradient(90deg, #007FFF 0%, #FCD116 50%, #CE1126 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: bold;
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
+DOSSIER_PROFILS = "profils_images"
+DOSSIER_PRODUITS = "produits_images"
+DOSSIER_STORIES = "stories_images"
 FICHIER_UTILISATEURS = "utilisateurs.txt"
-FICHIER_CATALOGUE = "catalogue_produits.txt"
-FICHIER_VENTES = "historique_ventes.txt"
-FICHIER_AVIS = "avis_produits.txt"
-FICHIER_MESSAGES = "messages_chat.txt"
-DOSSIER_IMAGES = "images_produits"
-DOSSIER_PROFILS = "images_profils"
+FICHIER_PRODUITS = "catalogue_fournisseurs.txt"
+FICHIER_MESSAGES = "messages.txt"
+FICHIER_STORIES = "stories.txt"
 
-# Numéro Orange Money pour les frais d'inscription vendeur (2 000 FC)
-NUMERO_ORANGE_MONEY = "+243 895 341 914"
-
-if not os.path.exists(DOSSIER_IMAGES):
-    os.makedirs(DOSSIER_IMAGES)
-if not os.path.exists(DOSSIER_PROFILS):
-    os.makedirs(DOSSIER_PROFILS)
-
-# Initialisation de la session utilisateur
-if "panier" not in st.session_state:
-    st.session_state["panier"] = []
-
-if "theme" not in st.session_state:
-    st.session_state["theme"] = "Clair"
-
-if "user_connecte" not in st.session_state:
-    st.session_state["user_connecte"] = None
-if "role_connecte" not in st.session_state:
-    st.session_state["role_connecte"] = None
-if "boutique_connecte" not in st.session_state:
-    st.session_state["boutique_connecte"] = ""
-if "chat_actif" not in st.session_state:
-    st.session_state["chat_actif"] = None
-
-
-# --- FONCTIONS HASHING & UTILISATEURS ---
-def hacher_mdp(mdp):
-    return hashlib.sha256(mdp.encode()).hexdigest()
-
-
-def lire_utilisateurs():
-    users = {}
-    if os.path.exists(FICHIER_UTILISATEURS):
-        with open(FICHIER_UTILISATEURS, "r", encoding="utf-8") as f:
-            for line in f:
-                parts = line.strip().split(" | ")
-                if len(parts) >= 4:
-                    u, m, r, b, t, g, profil, ref = "", "", "", "", "", "", "", ""
-                    for p in parts:
-                        if ":" in p:
-                            k, val = p.split(":", 1)
-                            k, val = k.strip(), val.strip()
-                            if k == "User":
-                                u = val
-                            elif k == "Mdp":
-                                m = val
-                            elif k == "Role":
-                                r = val
-                            elif k == "Boutique":
-                                b = val
-                            elif k == "Phone":
-                                t = val
-                            elif k == "Gmail":
-                                g = val
-                            elif k == "Profil":
-                                profil = val
-                            elif k == "RefOM":
-                                ref = val
-                    if u:
-                        users[u] = {"mdp": m, "role": r, "boutique": b, "phone": t, "gmail": g, "profil": profil}
-    return users
+# Dictionnaire de traduction de base pour l'interface
+TRADUCTIONS = {
+    "Français": {
+        "titre": "E-243 KISANGANI",
+        "catalogue": "🛍️ Catalogue des Produits",
+        "profil": "👤 Mon Profil & Paramètres",
+        "messenger": "💬 Messenger (Discussions)",
+        "stories": "📱 Stories des Articles",
+        "deconnexion": "Se déconnecter",
+    },
+    "Lingala": {
+        "titre": "E-243 KISANGANI",
+        "catalogue": "🛍️ Biloko nionso ya mombongo",
+        "profil": "👤 Profile na Ngai & Mibeko",
+        "messenger": "💬 Masolo (Discussions)",
+        "stories": "📱 Statuts ya Biloko",
+        "deconnexion": "Kobima",
+    },
+    "Swahili": {
+        "titre": "E-243 KISANGANI",
+        "catalogue": "🛍️ Orodha ya Bidhaa",
+        "profil": "👤 Wasifu Wangu & Mipangilio",
+        "messenger": "💬 Ujumbe (Mazungumzo)",
+        "stories": "📱 Hali za Bidhaa",
+        "deconnexion": "Toka nje",
+    },
+    "Tshiluba": {
+        "titre": "E-243 KISANGANI",
+        "catalogue": "🛍️ Bintu bia Bukula",
+        "profil": "👤 Tshifulu tshia Muntu & Biamba",
+        "messenger": "💬 Diyukakana",
+        "stories": "📱 Nsombelu ya Bintu",
+        "deconnexion": "Kubima",
+    },
+    "Kikongo": {
+        "titre": "E-243 KISANGANI",
+        "catalogue": "🛍️ Mambu ya Zandu",
+        "profil": "👤 Zina diaku & Mambu",
+        "messenger": "💬 Matangi",
+        "stories": "📱 Nkinga ya Mambu",
+        "deconnexion": "Kunsuka",
+    },
+    "English": {
+        "titre": "E-243 KISANGANI",
+        "catalogue": "🛍️ Product Catalog",
+        "profil": "👤 My Profile & Settings",
+        "messenger": "💬 Messenger (Chats)",
+        "stories": "📱 Item Stories",
+        "deconnexion": "Log out",
+    },
+}
 
 
-def inscrire_utilisateur(user, mdp, role, boutique="", phone="", gmail="", chemin_profil="", ref_om=""):
-    users = lire_utilisateurs()
-    if user in users:
-        return False, "Ce nom d'utilisateur existe déjà !"
+# --- FONCTIONS DE GESTION ---
+def charger_utilisateurs():
+  utilisateurs = {}
+  if not os.path.exists(FICHIER_UTILISATEURS):
+    return utilisateurs
+  with open(FICHIER_UTILISATEURS, "r", encoding="utf-8") as f:
+    for ligne in f:
+      p = ligne.strip().split(";")
+      if len(p) >= 2:
+        utilisateurs[p[0]] = {
+            "user": p[0],
+            "mdp": p[1],
+            "role": p[2] if len(p) > 2 else "Acheteur",
+            "boutique": p[3] if len(p) > 3 else "",
+            "phone": p[4] if len(p) > 4 else "",
+            "gmail": p[5] if len(p) > 5 else "",
+            "profil_path": p[6] if len(p) > 6 else "",
+            "ref_om": p[7] if len(p) > 7 else "",
+            "ville": p[8] if len(p) > 8 and p[8] else "Kisangani",
+            "commune": p[9] if len(p) > 9 and p[9] else "Non spécifiée",
+            "langue": p[10] if len(p) > 10 and p[10] else "Français",
+        }
+  return utilisateurs
 
-    mdp_h = hacher_mdp(mdp)
-    ligne = f"User : {user} | Mdp : {mdp_h} | Role : {role} | Boutique : {boutique} | Phone : {phone} | Gmail : {gmail} | Profil : {chemin_profil} | RefOM : {ref_om}\n"
-    with open(FICHIER_UTILISATEURS, "a", encoding="utf-8") as f:
-        f.write(ligne)
-    return True, "Compte créé avec succès !"
+
+def sauvegarder_utilisateurs(utilisateurs):
+  with open(FICHIER_UTILISATEURS, "w", encoding="utf-8") as f:
+    for u, data in utilisateurs.items():
+      f.write(
+          f"{data['user']};{data['mdp']};{data['role']};{data['boutique']};{data['phone']};{data['gmail']};{data['profil_path']};{data['ref_om']};{data['ville']};{data['commune']};{data['langue']}\n"
+      )
+
+
+def inscrire_utilisateur(
+    user, mdp, role, boutique, phone, gmail, profil_path, ref_om
+):
+  utilisateurs = charger_utilisateurs()
+  if user in utilisateurs:
+    return False, "Ce nom d'utilisateur existe déjà."
+  for u, data in utilisateurs.items():
+    if data["gmail"] == gmail and gmail != "":
+      return False, "Cet e-mail est déjà associé à un compte."
+
+  utilisateurs[user] = {
+      "user": user,
+      "mdp": mdp,
+      "role": role,
+      "boutique": boutique,
+      "phone": phone,
+      "gmail": gmail,
+      "profil_path": profil_path,
+      "ref_om": ref_om,
+      "ville": "Kisangani",
+      "commune": "Non spécifiée",
+      "langue": "Français",
+  }
+  sauvegarder_utilisateurs(utilisateurs)
+  return True, "Compte créé avec succès ! Bienvenue sur E-243."
 
 
 def verifier_connexion(user, mdp):
-    users = lire_utilisateurs()
-    if user in users:
-        if users[user]["mdp"] == hacher_mdp(mdp):
-            return True, users[user]["role"], users[user]["boutique"]
-    return False, None, None
+  utilisateurs = charger_utilisateurs()
+  if user in utilisateurs and utilisateurs[user]["mdp"] == mdp:
+    return utilisateurs[user]
+  return None
 
 
-def obtenir_infos_utilisateur(nom_user):
-    users = lire_utilisateurs()
-    return users.get(nom_user, {})
+# --- GESTION DE LA SESSION ---
+if "user_connecte" not in st.session_state:
+  st.session_state.user_connecte = None
 
+if "chat_actif" not in st.session_state:
+  st.session_state.chat_actif = None
 
-# --- FONCTIONS MESSAGERIE CHAT ---
-def lire_messages():
-    messages = []
-    if os.path.exists(FICHIER_MESSAGES):
-        with open(FICHIER_MESSAGES, "r", encoding="utf-8") as f:
-            for line in f:
-                parts = line.strip().split(" | ")
-                if len(parts) >= 4:
-                    exp, dest, date_m, texte = "", "", "", ""
-                    for p in parts:
-                        if ":" in p:
-                            k, v = p.split(":", 1)
-                            k, v = k.strip(), v.strip()
-                            if k == "Expediteur":
-                                exp = v
-                            elif k == "Destinataire":
-                                dest = v
-                            elif k == "Date":
-                                date_m = v
-                            elif k == "Texte":
-                                texte = v
-                    messages.append({"exp": exp, "dest": dest, "date": date_m, "texte": texte})
-    return messages
+user_info = st.session_state.user_connecte
 
+langue_courante = (
+    user_info["langue"]
+    if user_info and "langue" in user_info
+    else "Français"
+)
+t = TRADUCTIONS.get(langue_courante, TRADUCTIONS["Français"])
 
-def sauvegarder_message(expediteur, destinataire, texte):
-    date_str = datetime.now().strftime("%d/%m/%Y %H:%M")
-    with open(FICHIER_MESSAGES, "a", encoding="utf-8") as f:
-        f.write(f"Expediteur : {expediteur} | Destinataire : {destinataire} | Date : {date_str} | Texte : {texte}\n")
+# ==========================================
+# CAS 1 : PERSONNE N'EST CONNECTÉ (ACCUEIL PUBLIC)
+# ==========================================
+if user_info is None:
+  st.markdown(
+      "<h1 class='titre-rdc'>E-243 KISANGANI</h1>", unsafe_allow_html=True
+  )
+  st.markdown(
+      "Découvrez les produits de nos fournisseurs locaux en gros et en"
+      " détail."
+  )
 
+  st.sidebar.title("Mon Compte")
+  menu_auth = st.sidebar.selectbox(
+      "Navigation", ["🛍️ Voir le Catalogue", "Se Connecter", "📝 Créer un Compte"]
+  )
 
-# --- FONCTIONS CATALOGUE & VENTES ---
-def lire_catalogue():
-    produits = []
-    if os.path.exists(FICHIER_CATALOGUE):
-        with open(FICHIER_CATALOGUE, "r", encoding="utf-8") as f:
-            for line in f:
-                parts = line.strip().split(" | ")
-                if len(parts) >= 4:
-                    item = {}
-                    for p in parts:
-                        if ":" in p:
-                            k, v = p.split(":", 1)
-                            item[k.strip()] = v.strip()
-                    produits.append(item)
-    return produits
+  if menu_auth == "📝 Créer un Compte":
+    st.subheader("Rejoignez E-243 en tant qu'Acheteur ou Fournisseur")
+    with st.form("form_inscription"):
+      type_compte = st.radio(
+          "Je souhaite m'inscrire en tant que :",
+          [
+              "🛒 Acheteur (Je veux acheter)",
+              "🏭 Fournisseur / Vendeur (Je veux vendre mes produits)",
+          ],
+      )
+      reg_user = st.text_input("Nom d'utilisateur (Pseudo)")
+      reg_mdp = st.text_input("Mot de passe", type="password")
+      reg_gmail = st.text_input("Adresse e-mail (ex: nom@gmail.com)")
+      reg_phone = st.text_input("Numéro de téléphone")
 
+      reg_boutique = ""
+      reg_ref_om = ""
+      if "Fournisseur" in type_compte:
+        reg_boutique = st.text_input("Nom de la Boutique / Entreprise")
+        reg_ref_om = st.text_input("Référence de transaction / Paiement")
 
-def sauvegarder_produit(nom, prix, stock, categorie, boutique, quartier, phone, chemin_image=""):
-    with open(FICHIER_CATALOGUE, "a", encoding="utf-8") as f:
-        f.write(
-            f"Article : {nom} | Prix : {prix} FC | Stock : {stock} | Categorie : {categorie} | Boutique : {boutique} | Quartier : {quartier} | Phone : {phone} | Image : {chemin_image}\n")
+      reg_profil_file = st.file_uploader(
+          "Photo de profil ou logo", type=["png", "jpg", "jpeg"]
+      )
 
+      btn_reg = st.form_submit_button("S'inscrire")
+      if btn_reg:
+        role = "Fournisseur" if "Fournisseur" in type_compte else "Acheteur"
+        if not reg_user or not reg_mdp or not reg_gmail:
+          st.error("❌ Veuillez remplir les champs obligatoires.")
+        elif "@gmail.com" not in reg_gmail.lower():
+          st.error("❌ L'adresse e-mail doit contenir '@gmail.com'.")
+        elif role == "Fournisseur" and (not reg_boutique or not reg_ref_om):
+          st.error(
+              "❌ Le nom de la boutique et la référence de paiement sont"
+              " requis."
+          )
+        else:
+          profil_path = ""
+          if reg_profil_file:
+            if not os.path.exists(DOSSIER_PROFILS):
+              os.makedirs(DOSSIER_PROFILS)
+            profil_path = os.path.join(
+                DOSSIER_PROFILS, f"profil_{reg_user}_{reg_profil_file.name}"
+            )
+            with open(profil_path, "wb") as f:
+              f.write(reg_profil_file.getbuffer())
 
-def lire_avis():
-    avis_dict = {}
-    if os.path.exists(FICHIER_AVIS):
-        with open(FICHIER_AVIS, "r", encoding="utf-8") as f:
-            for line in f:
-                parts = line.strip().split(" | ")
-                if len(parts) >= 4:
-                    art = parts[0].replace("Article :", "").strip()
-                    auteur = parts[1].replace("Auteur :", "").strip()
-                    note = int(parts[2].replace("Note :", "").strip())
-                    com = parts[3].replace("Com :", "").strip()
-                    if art not in avis_dict:
-                        avis_dict[art] = []
-                    avis_dict[art].append({"auteur": auteur, "note": note, "com": com})
-                elif len(parts) >= 3:
-                    art = parts[0].replace("Article :", "").strip()
-                    note = int(parts[1].replace("Note :", "").strip())
-                    com = parts[2].replace("Com :", "").strip()
-                    if art not in avis_dict:
-                        avis_dict[art] = []
-                    avis_dict[art].append({"auteur": "Anonyme", "note": note, "com": com})
-    return avis_dict
+          succes, msg = inscrire_utilisateur(
+              reg_user.strip(),
+              reg_mdp,
+              role,
+              reg_boutique.strip(),
+              reg_phone.strip(),
+              reg_gmail.strip(),
+              profil_path,
+              reg_ref_om.strip(),
+          )
+          if succes:
+            st.success(f"🎉 {msg} Vous pouvez maintenant vous connecter.")
+          else:
+            st.error(f"⚠️ {msg}")
 
+  elif menu_auth == "Se Connecter":
+    st.subheader("Connexion à votre espace E-243")
+    with st.form("form_connexion"):
+      log_user = st.text_input("Nom d'utilisateur")
+      log_mdp = st.text_input("Mot de passe", type="password")
+      btn_connexion = st.form_submit_button("Se connecter")
 
-def sauvegarder_avis(article, auteur, note, commentaire):
-    with open(FICHIER_AVIS, "a", encoding="utf-8") as f:
-        f.write(f"Article : {article} | Auteur : {auteur} | Note : {note} | Com : {commentaire}\n")
+      if btn_connexion:
+        utilisateur = verifier_connexion(log_user.strip(), log_mdp)
+        if utilisateur:
+          st.session_state.user_connecte = utilisateur
+          st.success(f"Connexion réussie ! Bienvenue {utilisateur['user']}")
+          st.rerun()
+        else:
+          st.error("❌ Identifiant ou mot de passe incorrect.")
 
+  st.subheader("🛍️ Catalogue Public des Produits")
+  if os.path.exists(FICHIER_PRODUITS):
+    recherche = st.text_input("🔍 Rechercher un produit ou un fournisseur...")
+    with open(FICHIER_PRODUITS, "r", encoding="utf-8") as f_prod:
+      for ligne in f_prod:
+        p = ligne.strip().split(";")
+        if len(p) >= 8:
+          boutique_vendeur, nom_p, cat_p, prix_p, stock_p, moq_p, desc_p, img_p = (
+              p[0],
+              p[1],
+              p[2],
+              p[3],
+              p[4],
+              p[5],
+              p[6],
+              p[7],
+          )
+          ville_p = p[8] if len(p) > 8 and p[8] else "Kisangani"
+          commune_p = p[9] if len(p) > 9 and p[9] else "Non spécifiée"
 
-def mettre_a_jour_stock(nom_article, qte_vendue):
-    if not os.path.exists(FICHIER_CATALOGUE):
-        return False
-    mis_a_jour = False
-    nouvelles_lignes = []
-    with open(FICHIER_CATALOGUE, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+          if (
+              recherche.lower() in nom_p.lower()
+              or recherche.lower() in boutique_vendeur.lower()
+          ):
+            col_img, col_details = st.columns([1, 2])
+            with col_img:
+              if img_p and os.path.exists(img_p):
+                st.image(img_p, width=180)
+              else:
+                st.info("📷 Pas d'image")
+            with col_details:
+              st.markdown(f"### 📦 {nom_p} ({prix_p} $)")
+              st.write(
+                  f"🏭 **Fournisseur :** {boutique_vendeur} | 📂 **Catégorie"
+                  f" :** {cat_p}"
+              )
+              st.write(
+                  f"📍 **Adresse :** Ville de {ville_p}, Commune de"
+                  f" {commune_p}"
+              )
+              st.write(f"📝 {desc_p}")
+              if st.button(
+                  f"💬 Contacter ({boutique_vendeur})",
+                  key=f"pub_{boutique_vendeur}_{nom_p}",
+              ):
+                st.warning("⚠️ Connectez-vous pour contacter ce fournisseur.")
+            st.markdown("---")
 
-    for line in lines:
-        if f"Article : {nom_article} |" in line or f"Article : {nom_article} " in line:
-            parts = line.strip().split(" | ")
-            d = {}
-            for p in parts:
-                if ":" in p:
-                    k, v = p.split(":", 1)
-                    d[k.strip()] = v.strip()
-
-            stock_actuel = int(d.get("Stock", 0))
-            if stock_actuel >= qte_vendue:
-                nouveau_stock = stock_actuel - qte_vendue
-                d["Stock"] = str(nouveau_stock)
-                line = f"Article : {d.get('Article')} | Prix : {d.get('Prix')} | Stock : {d.get('Stock')} | Categorie : {d.get('Categorie', 'Divers')} | Boutique : {d.get('Boutique', 'Générale')} | Quartier : {d.get('Quartier', 'Makiso')} | Phone : {d.get('Phone', '')} | Image : {d.get('Image', '')}\n"
-                mis_a_jour = True
-        nouvelles_lignes.append(line)
-
-    if mis_a_jour:
-        with open(FICHIER_CATALOGUE, "w", encoding="utf-8") as f:
-            f.writelines(nouvelles_lignes)
-    return mis_a_jour
-
-
-def generer_recu_panier_pdf(client, panier, total_general, date_str):
-    buffer = BytesIO()
-    p = canvas.Canvas(buffer, pagesize=letter)
-    p.setFont("Helvetica-Bold", 18)
-    p.drawString(180, 750, "E-243 KISANGANI MARKETPLACE")
-    p.setFont("Helvetica", 12)
-    p.drawString(210, 730, "Facture & Reçu de Commande")
-    p.line(50, 715, 550, 715)
-    p.setFont("Helvetica", 10)
-    p.drawString(50, 685, f"Date : {date_str}")
-    p.drawString(50, 670, f"Client : {client}")
-    p.setFont("Helvetica-Bold", 11)
-    p.drawString(50, 640, "Détails du Panier :")
-    y = 615
-    p.setFont("Helvetica", 10)
-    for item in panier:
-        p.drawString(60, y, f"• {item['article']} x {item['qte']} — Total: {item['subtotal']:,} FC".replace(",", " "))
-        y -= 20
-        if y < 150:
-            p.showPage()
-            y = 700
-    p.line(50, y - 10, 550, y - 10)
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(50, y - 35, f"TOTAL GÉNÉRAL PAYÉ : {total_general:,} FC".replace(",", " "))
-    p.setFont("Helvetica-Oblique", 10)
-    p.drawString(180, y - 80, "Merci de votre confiance sur E-243 Kisangani !")
-    p.showPage()
-    p.save()
-    buffer.seek(0)
-    return buffer
-
-
-# --- CSS STYLES ---
-bg_color = "#121212" if st.session_state["theme"] == "Sombre" else "#f8f9fa"
-text_color = "#ffffff" if st.session_state["theme"] == "Sombre" else "#212529"
-
-st.markdown(f"""
-    <style>
-    .stApp {{ background-color: {bg_color}; color: {text_color}; }}
-    .hero-header {{
-        background: linear-gradient(135deg, #1b4965 0%, #2b6cb0 100%);
-        padding: 25px;
-        border-radius: 12px;
-        color: white;
-        text-align: center;
-        margin-bottom: 20px;
-    }}
-    .hero-header h1 {{ color: white !important; margin: 0; }}
-    .chat-bubble-sent {{
-        background-color: #dcf8c6;
-        padding: 10px;
-        border-radius: 8px;
-        margin: 5px 0;
-        text-align: right;
-        color: #000;
-    }}
-    .chat-bubble-recv {{
-        background-color: #ffffff;
-        padding: 10px;
-        border-radius: 8px;
-        margin: 5px 0;
-        text-align: left;
-        color: #000;
-        border: 1px solid #ddd;
-    }}
-    </style>
-""", unsafe_allow_html=True)
-
-# --- EN-TÊTE PRINCIPAL ---
-st.markdown("""
-    <div class="hero-header">
-        <h1>🛍️ E-243 KISANGANI</h1>
-        <p>Marketplace & Plateforme Commerciale Multi-communes de Kisangani</p>
-    </div>
-""", unsafe_allow_html=True)
-
-# --- BARRE LATÉRALE : GESTION DES COMPTES & AUTHENTIFICATION ---
-st.sidebar.title("🔐 Espace Utilisateur")
-
-if st.session_state["user_connecte"] is None:
-    menu_auth = st.sidebar.selectbox("Action :", ["🔑 Se Connecter", "📝 Créer un Compte"])
-
-    if menu_auth == "🔑 Se Connecter":
-        st.sidebar.subheader("Connexion")
-        with st.sidebar.form("form_login"):
-            u_input = st.text_input("Nom d'utilisateur")
-            m_input = st.text_input("Mot de passe", type="password")
-            btn_login = st.form_submit_button("Se Connecter")
-            if btn_login:
-                ok, role, boutique = verifier_connexion(u_input, m_input)
-                if ok:
-                    st.session_state["user_connecte"] = u_input
-                    st.session_state["role_connecte"] = role
-                    st.session_state["boutique_connecte"] = boutique
-                    st.success(f"Bienvenue {u_input} !")
-                    st.rerun()
-                else:
-                    st.error("Nom d'utilisateur ou mot de passe incorrect.")
-
-    elif menu_auth == "📝 Créer un Compte":
-        st.sidebar.subheader("Inscription")
-        type_compte = st.sidebar.radio("Type de compte :", ["Acheteur (Gratuit)", "Vendeur (2 000 FC)"])
-
-        if "Vendeur" in type_compte:
-            st.sidebar.markdown(f"""
-                <div style="font-size: 12px; background-color: #ff6600; color: white; padding: 10px; border-radius: 6px;">
-                    <b>Paiement Orange Money :</b><br>
-                    Envoyez <b>2 000 FC</b> au <b>{NUMERO_ORANGE_MONEY}</b> avant de valider votre inscription.
-                </div>
-            """, unsafe_allow_html=True)
-
-        with st.sidebar.form("form_register"):
-            reg_user = st.text_input("Choisir un pseudo")
-            reg_mdp = st.text_input("Mot de passe", type="password")
-            reg_gmail = st.text_input("Adresse Gmail (ex: nom@gmail.com)")
-            reg_phone = st.text_input("Téléphone / WhatsApp (+243...)")
-
-            reg_boutique = ""
-            reg_ref_om = ""
-            if "Vendeur" in type_compte:
-                reg_boutique = st.text_input("Nom de la Boutique")
-                reg_ref_om = st.text_input("Référence / ID Transaction Orange Money")
-
-            reg_profil_file = st.file_uploader("Photo de profil", type=["png", "jpg", "jpeg"])
-
-            btn_reg = st.form_submit_button("S'inscrire")
-            if btn_reg:
-                role = "Vendeur" if "Vendeur" in type_compte else "Acheteur"
-                if not reg_user or not reg_mdp or not reg_gmail:
-                    st.sidebar.warning("Veuillez remplir le pseudo, le mot de passe et l'adresse Gmail.")
-                elif "@gmail.com" not in reg_gmail.lower():
-                    st.sidebar.warning("Veuillez entrer une adresse Gmail valide.")
-                elif role == "Vendeur" and (not reg_boutique or not reg_ref_om):
-                    st.sidebar.warning("Veuillez indiquer le nom de votre boutique et la référence Orange Money.")
-                else:
-                    profil_path = ""
-                    if reg_profil_file:
-                        profil_path = os.path.join(DOSSIER_PROFILS,
-                                                   f"profil_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{reg_profil_file.name}")
-                        with open(profil_path, "wb") as f:
-                            f.write(reg_profil_file.getbuffer())
-
-                    succes, msg = inscrire_utilisateur(reg_user, reg_mdp, role, reg_boutique, reg_phone, reg_gmail,
-                                                       profil_path, reg_ref_om)
-                    if succes:
-                        st.sidebar.success("Compte créé avec succès ! Connectez-vous.")
-                    else:
-                        st.sidebar.error(msg)
+# ==========================================
+# CAS 2 : UTILISATEUR CONNECTÉ
+# ==========================================
 else:
-    user_infos = obtenir_infos_utilisateur(st.session_state["user_connecte"])
-    profil_path_connecte = user_infos.get("profil", "")
+  st.sidebar.title(f"E-243 ({user_info['role']})")
+  if user_info["profil_path"] and os.path.exists(user_info["profil_path"]):
+    st.sidebar.image(user_info["profil_path"], width=100)
 
-    if profil_path_connecte and os.path.exists(profil_path_connecte):
-        st.sidebar.image(profil_path_connecte, width=80)
+  st.sidebar.write(f"👤 **{user_info['user']}**")
+  if user_info["role"] == "Fournisseur":
+    st.sidebar.write(f"🏭 **{user_info['boutique']}**")
 
-    st.sidebar.success(
-        f"Connecté : **{st.session_state['user_connecte']}**\n\nRôle : **{st.session_state['role_connecte']}**")
-    if st.sidebar.button("🚪 Se Déconnecter"):
-        st.session_state["user_connecte"] = None
-        st.session_state["role_connecte"] = None
-        st.session_state["boutique_connecte"] = ""
-        st.session_state["chat_actif"] = None
-        st.rerun()
+  options_menu = [
+      "🛍️ Catalogue & Achats",
+      "👤 Mon Profil & Paramètres",
+      "📱 Stories (Statuts)",
+      "💬 Messenger",
+  ]
+  if user_info["role"] == "Fournisseur":
+    options_menu.append("📦 Gérer mes produits")
 
-st.sidebar.write("---")
+  menu_principal = st.sidebar.radio("Navigation", options_menu)
 
-# Bascule Thème
-theme_choisi = st.sidebar.radio("🎨 Mode d'affichage :", ["Clair", "Sombre"],
-                                index=0 if st.session_state["theme"] == "Clair" else 1)
-if theme_choisi != st.session_state["theme"]:
-    st.session_state["theme"] = theme_choisi
+  if st.sidebar.button(t["deconnexion"]):
+    st.session_state.user_connecte = None
+    st.session_state.chat_actif = None
     st.rerun()
 
-st.sidebar.write("---")
+  # --- ESPACE PROFIL & PARAMÈTRES ---
+  if menu_principal == "👤 Mon Profil & Paramètres":
+    st.title("👤 Gestion de votre Profil & Paramètres Professionnels")
+    st.markdown(
+        "Modifiez vos informations personnelles, votre localisation, votre"
+        " langue et votre sécurité en toute simplicité."
+    )
 
-# Navigation globale de l'application
-pages_disponibles = ["🛒 Marketplace & Produits", "🛍️ Voir mon Panier", "💬 Messagerie Interne"]
-if st.session_state["role_connecte"] == "Vendeur":
-    pages_disponibles.extend(["➕ Publier un Produit", "📊 Bilan & Graphiques Ventes"])
+    utilisateurs = charger_utilisateurs()
+    actuel = utilisateurs[user_info["user"]]
 
-nb_items_panier = sum(item['qte'] for item in st.session_state["panier"])
-st.sidebar.markdown(f"🛒 **Mon Panier :** `{nb_items_panier}` article(s)")
-page = st.sidebar.radio("Navigation :", pages_disponibles)
+    with st.form("form_modifier_profil"):
+      col1, col2 = st.columns(2)
+      with col1:
+        nouveau_nom = st.text_input("Nom d'utilisateur", value=actuel["user"])
+        nouveau_gmail = st.text_input("Adresse Gmail", value=actuel["gmail"])
+        nouveau_phone = st.text_input(
+            "Numéro de téléphone", value=actuel["phone"]
+        )
+        nouveau_mdp = st.text_input(
+            "Nouveau mot de passe (laisser vide pour ne pas changer)",
+            type="password",
+        )
 
-# ==========================================
-# 1. MARKETPLACE
-# ==========================================
-if page == "🛒 Marketplace & Produits":
-    st.subheader("🔍 Recherche, Communes & Filtres")
+      with col2:
+        nouvelle_ville = st.text_input("Ville", value=actuel["ville"])
+        nouvelle_commune = st.text_input("Commune", value=actuel["commune"])
 
-    col_search, col_quartier = st.columns([2, 1])
-    with col_search:
-        recherche = st.text_input("Recherche", placeholder="Nom d'article...", label_visibility="collapsed")
-    with col_quartier:
-        commune_filtre = st.selectbox("Commune / Zone", ["Toutes", "Makiso", "Tshopo", "Mangobo", "Kabondo", "Lubunga",
-                                                         "Kisangani (Centre)"], label_visibility="collapsed")
+        langues_dispo = [
+            "Français",
+            "English",
+            "Lingala",
+            "Swahili",
+            "Tshiluba",
+            "Kikongo",
+        ]
+        index_langue = (
+            langues_dispo.index(actuel["langue"])
+            if actuel["langue"] in langues_dispo
+            else 0
+        )
+        choix_langue = st.selectbox(
+            "Langue de l'application", langues_dispo, index=index_langue
+        )
 
-    produits = lire_catalogue()
-    avis_data = lire_avis()
+        nouveau_logo = st.file_uploader(
+            "Mettre à jour la photo de profil / logo",
+            type=["png", "jpg", "jpeg"],
+        )
 
-    col_f1, col_f2 = st.columns(2)
-    with col_f1:
-        boutiques_existantes = list(set([p.get("Boutique", "Toutes") for p in produits]))
-        boutiques_existantes.insert(0, "Toutes les boutiques")
-        filtre_boutique = st.selectbox("🏬 Filtrer par boutique :", boutiques_existantes)
-    with col_f2:
-        max_prix = st.slider("💰 Prix max (FC) :", 1000, 500000, 500000, step=5000)
+      btn_sauver = st.form_submit_button("Enregistrer les modifications 💾")
 
-    categories = ["Toutes", "Électronique", "Alimentation", "Vêtements", "Artisanat", "Divers"]
-    choix_cat = st.radio("Catégories :", categories, horizontal=True)
+      if btn_sauver:
+        if "@gmail.com" not in nouveau_gmail.lower() and nouveau_gmail != "":
+          st.error("❌ L'adresse e-mail doit impérativement être un compte Gmail.")
+        else:
+          chemin_img = actuel["profil_path"]
+          if nouveau_logo:
+            if not os.path.exists(DOSSIER_PROFILS):
+              os.makedirs(DOSSIER_PROFILS)
+            chemin_img = os.path.join(
+                DOSSIER_PROFILS,
+                f"profil_{nouveau_nom}_{nouveau_logo.name}",
+            )
+            with open(chemin_img, "wb") as f:
+              f.write(nouveau_logo.getbuffer())
 
-    st.write("---")
+          mot_de_passe_final = (
+              nouveau_mdp if nouveau_mdp != "" else actuel["mdp"]
+          )
 
-    if recherche:
-        produits = [p for p in produits if recherche.lower() in p.get("Article", "").lower()]
-    if choix_cat != "Toutes":
-        produits = [p for p in produits if p.get("Categorie") == choix_cat]
-    if filtre_boutique != "Toutes les boutiques":
-        produits = [p for p in produits if p.get("Boutique") == filtre_boutique]
-    if commune_filtre != "Toutes":
-        produits = [p for p in produits if p.get("Quartier") == commune_filtre]
+          if nouveau_nom != user_info["user"]:
+            if nouveau_nom in utilisateurs:
+              st.error(
+                  "❌ Ce nom d'utilisateur est déjà pris par un autre compte."
+              )
+              st.stop()
+            del utilisateurs[user_info["user"]]
 
-    produits_filtrés = []
-    for p in produits:
-        p_str = p.get("Prix", "0").replace("FC", "").strip()
-        p_int = int(p_str) if p_str.isdigit() else 0
-        if p_int <= max_prix:
-            produits_filtrés.append(p)
+          utilisateurs[nouveau_nom] = {
+              "user": nouveau_nom,
+              "mdp": mot_de_passe_final,
+              "role": actuel["role"],
+              "boutique": (
+                  nouveau_nom
+                  if actuel["role"] == "Fournisseur"
+                  else actuel["boutique"]
+              ),
+              "phone": nouveau_phone,
+              "gmail": nouveau_gmail,
+              "profil_path": chemin_img,
+              "ref_om": actuel["ref_om"],
+              "ville": nouvelle_ville,
+              "commune": nouvelle_commune,
+              "langue": choix_langue,
+          }
 
-    st.subheader(f"📦 {len(produits_filtrés)} article(s) disponible(s)")
+          sauvegarder_utilisateurs(utilisateurs)
+          st.session_state.user_connecte = utilisateurs[nouveau_nom]
+          st.success("🎉 Profil mis à jour avec succès ! Rechargement...")
+          st.rerun()
 
-    users_global = lire_utilisateurs()
+  # --- ESPACE STORIES ---
+  elif menu_principal == "📱 Stories (Statuts)":
+    st.title("📱 Stories & Nouveautés des Articles")
+    st.markdown(
+        "Découvrez les publications instantanées et stories partagées par les"
+        " vendeurs !"
+    )
 
-    if not produits_filtrés:
-        st.info("Aucun produit ne correspond à vos critères.")
-    else:
-        cols = st.columns(2)
-        for idx, prod in enumerate(produits_filtrés):
-            col = cols[idx % 2]
-            with col:
-                with st.container():
-                    art_nom = prod.get('Article')
-                    cat = prod.get("Categorie", "Divers")
-                    img_path = prod.get("Image", "")
-                    quartier = prod.get("Quartier", "Makiso")
-                    nom_boutique = prod.get('Boutique', 'Générale')
+    if not os.path.exists(FICHIER_STORIES):
+      open(FICHIER_STORIES, "w").close()
 
-                    # Trouver le nom du vendeur propriétaire de cette boutique et son profil
-                    vendeur_proprio = ""
-                    profil_vendeur_path = ""
-                    for u, u_data in users_global.items():
-                        if u_data.get("boutique") == nom_boutique:
-                            vendeur_proprio = u
-                            profil_vendeur_path = u_data.get("profil", "")
-                            break
+    with st.expander("➕ Publier une story sur un article"):
+      with st.form("form_story", clear_on_submit=True):
+        legende_story = st.text_area(
+            "Légende / Description rapide de la story"
+        )
+        img_story_file = st.file_uploader(
+            "Photo ou vidéo de l'article pour la story",
+            type=["png", "jpg", "jpeg"],
+        )
+        btn_pub_story = st.form_submit_button("Publier la Story 🚀")
+        if btn_pub_story:
+          if not img_story_file:
+            st.error("❌ Veuillez inclure une image pour votre story.")
+          else:
+            if not os.path.exists(DOSSIER_STORIES):
+              os.makedirs(DOSSIER_STORIES)
+            path_story = os.path.join(
+                DOSSIER_STORIES,
+                f"story_{user_info['user']}_{img_story_file.name}",
+            )
+            with open(path_story, "wb") as f:
+              f.write(img_story_file.getbuffer())
 
-                    # En-tête de la carte avec photo de profil du vendeur
-                    col_p1, col_p2 = st.columns([1, 4])
-                    with col_p1:
-                        if profil_vendeur_path and os.path.exists(profil_vendeur_path):
-                            st.image(profil_vendeur_path, width=45)
-                        else:
-                            st.markdown("👤")
-                    with col_p2:
-                        st.markdown(
-                            f"**{cat.upper()}**<br><span style='font-size: 13px; color: #555;'>🏬 {nom_boutique} (📍 {quartier})</span>",
-                            unsafe_allow_html=True)
-
-                    st.write("")
-
-                    if img_path and os.path.exists(img_path):
-                        st.image(img_path, use_container_width=True)
-                    else:
-                        icone = "📱" if cat == "Électronique" else "🍚" if cat == "Alimentation" else "👕" if cat == "Vêtements" else "🛍️"
-                        st.markdown(f"<h1 style='text-align: center; font-size: 50px;'>{icone}</h1>",
-                                    unsafe_allow_html=True)
-
-                    st.markdown(f"### {art_nom}")
-                    st.markdown(f"<h4 style='color: #8b1e1e;'>{prod.get('Prix')} FC</h4>", unsafe_allow_html=True)
-
-                    avis_art = avis_data.get(art_nom, [])
-                    if avis_art:
-                        moy_note = sum(a['note'] for a in avis_art) / len(avis_art)
-                        st.caption(f"⭐ {moy_note:.1f}/5 ({len(avis_art)} avis)")
-
-                        with st.expander("💬 Voir les avis détaillés"):
-                            for av in avis_art:
-                                auteur_nom = av.get("auteur", "Anonyme")
-                                auteur_profil = users_global.get(auteur_nom, {}).get("profil", "")
-
-                                c_av1, c_av2 = st.columns([1, 6])
-                                with c_av1:
-                                    if auteur_profil and os.path.exists(auteur_profil):
-                                        st.image(auteur_profil, width=30)
-                                    else:
-                                        st.markdown("👤")
-                                with c_av2:
-                                    st.markdown(f"**{auteur_nom}** : {'⭐' * av['note']}<br>*{av['com']}*",
-                                                unsafe_allow_html=True)
-                                st.write("---")
-                    else:
-                        st.caption("⭐ Pas encore d'avis")
-
-                    c_btn1, c_btn2 = st.columns(2)
-                    with c_btn1:
-                        qte_aj = st.number_input("Qté", min_value=1, max_value=int(prod.get("Stock", 1)), value=1,
-                                                 key=f"qte_{idx}")
-                        if st.button(f"🛒 Ajouter au Panier", key=f"add_{idx}"):
-                            p_str = prod.get("Prix", "0").replace("FC", "").strip()
-                            pu = int(p_str) if p_str.isdigit() else 0
-
-                            st.session_state["panier"].append({
-                                "article": art_nom,
-                                "qte": qte_aj,
-                                "pu": pu,
-                                "subtotal": pu * qte_aj
-                            })
-                            st.success(f"{qte_aj} x {art_nom} ajouté(s) au panier !")
-                            st.rerun()
-
-                    with c_btn2:
-                        # Bouton de discussion interne direct vers le vendeur
-                        if vendeur_proprio:
-                            if st.button(f"💬 Discuter", key=f"chat_{idx}"):
-                                if st.session_state["user_connecte"] is None:
-                                    st.warning("Veuillez vous connecter pour discuter avec le vendeur.")
-                                else:
-                                    st.session_state["chat_actif"] = vendeur_proprio
-                                    st.rerun()
-                        else:
-                            st.caption("Vendeur direct non répertorié")
-
-                    with st.expander("📝 Laisser un avis"):
-                        if st.session_state["user_connecte"] is None:
-                            st.warning("Veuillez vous connecter pour laisser un avis.")
-                        else:
-                            with st.form(f"form_avis_{idx}"):
-                                note_donnee = st.slider("Note", 1, 5, 5, key=f"star_{idx}")
-                                com_donne = st.text_input("Votre commentaire", key=f"txt_{idx}")
-                                if st.form_submit_button("Envoyer l'Avis"):
-                                    sauvegarder_avis(art_nom, st.session_state["user_connecte"], note_donnee, com_donne)
-                                    st.success("Avis enregistré !")
-                                    st.rerun()
-
-                st.write("---")
-
-# ==========================================
-# 2. PANIER D'ACHAT
-# ==========================================
-elif page == "🛍️ Voir mon Panier":
-    st.header("🛍️ Mon Panier d'Achat")
-
-    if not st.session_state["panier"]:
-        st.info("Votre panier est vide pour l'instant. Allez sur la Marketplace pour ajouter des articles !")
-    else:
-        df_panier = pd.DataFrame(st.session_state["panier"])
-        st.table(df_panier[["article", "qte", "pu", "subtotal"]])
-
-        total_general = sum(item["subtotal"] for item in st.session_state["panier"])
-        st.markdown(f"### Total Général : **{total_general:,} FC**".replace(",", " "))
-
-        if st.button("🗑️ Vider le panier"):
-            st.session_state["panier"] = []
+            date_story = datetime.now().strftime("%d/%m/%Y %H:%M")
+            with open(FICHIER_STORIES, "a", encoding="utf-8") as fs:
+              fs.write(
+                  f"{user_info['user']};{legende_story};{path_story};{date_story}\n"
+              )
+            st.success("🎉 Votre story a été publiée avec succès !")
             st.rerun()
 
-        st.write("---")
-        st.subheader("📋 Finaliser la Commande")
+    st.markdown("---")
+    if os.path.exists(FICHIER_STORIES):
+      with open(FICHIER_STORIES, "r", encoding="utf-8") as fs:
+        lignes_stories = fs.readlines()
 
-        with st.form("form_commande_panier"):
-            nom_client = st.text_input("Nom complet de l'acheteur",
-                                       value=st.session_state["user_connecte"] if st.session_state[
-                                           "user_connecte"] else "")
-            btn_valider_panier = st.form_submit_button("✅ Valider la commande & Générer Reçu PDF")
+      if not lignes_stories:
+        st.info("ℹ️ Aucune story active pour le moment.")
+      else:
+        for ligne in reversed(lignes_stories):
+          s = ligne.strip().split(";")
+          if len(s) >= 4:
+            auteur, texte_s, img_s, date_s = s[0], s[1], s[2], s[3]
+            with st.container():
+              st.markdown(f"**👤 {auteur}** — *{date_s}*")
+              if img_s and os.path.exists(img_s):
+                st.image(img_s, width=350)
+              st.write(f"💬 {texte_s}")
+              st.markdown("---")
 
-            if btn_valider_panier:
-                if nom_client.strip():
-                    date_str = datetime.now().strftime("%d/%m/%Y %H:%M")
-                    date_iso = datetime.now().strftime("%Y-%m-%d")
-
-                    tout_ok = True
-                    for item in st.session_state["panier"]:
-                        if mettre_a_jour_stock(item["article"], item["qte"]):
-                            with open(FICHIER_VENTES, "a", encoding="utf-8") as f:
-                                f.write(
-                                    f"[{date_str}] DateISO : {date_iso} | Client : {nom_client.strip()} | Article : {item['article']} | Qté : {item['qte']} | Total : {item['subtotal']} FC\n")
-                        else:
-                            tout_ok = False
-
-                    if tout_ok:
-                        st.balloons()
-                        st.success("Commande effectuée avec succès !")
-
-                        pdf_bytes = generer_recu_panier_pdf(nom_client, st.session_state["panier"], total_general,
-                                                            date_str)
-                        st.download_button(
-                            label="📄 Télécharger le Reçu PDF Global",
-                            data=pdf_bytes,
-                            file_name=f"Recu_Panier_{nom_client}_{datetime.now().strftime('%Y%m%d%H%M')}.pdf",
-                            mime="application/pdf"
-                        )
-                        st.session_state["panier"] = []
-                    else:
-                        st.error("Problème de stock sur un des articles !")
-                else:
-                    st.warning("Veuillez remplir votre nom.")
-
-# ==========================================
-# 3. MESSAGERIE INTERNE (CHAT E-243)
-# ==========================================
-elif page == "💬 Messagerie Interne":
-    st.header("💬 Messagerie Directe E-243")
-
-    if st.session_state["user_connecte"] is None:
-        st.warning("🔒 Veuillez vous connecter pour accéder à votre messagerie.")
+  # --- ESPACE CATALOGUE & ACHATS ---
+  elif menu_principal == "🛍️ Catalogue & Achats":
+    st.title("🛒 Catalogue des Produits - E-243")
+    if not os.path.exists(FICHIER_PRODUITS):
+      st.info("ℹ️ Aucun produit disponible.")
     else:
-        user_actuel = st.session_state["user_connecte"]
-        role_actuel = st.session_state["role_connecte"]
+      recherche = st.text_input(
+          "🔍 Rechercher un produit, une commune, un fournisseur..."
+      )
+      with open(FICHIER_PRODUITS, "r", encoding="utf-8") as f_prod:
+        for ligne in f_prod:
+          p = ligne.strip().split(";")
+          if len(p) >= 8:
+            boutique_vendeur, nom_p, cat_p, prix_p, stock_p, moq_p, desc_p, img_p = (
+                p[0],
+                p[1],
+                p[2],
+                p[3],
+                p[4],
+                p[5],
+                p[6],
+                p[7],
+            )
+            ville_p = p[8] if len(p) > 8 and p[8] else "Kisangani"
+            commune_p = p[9] if len(p) > 9 and p[9] else "Non spécifiée"
+            livraison_p = (
+                p[10] if len(p) > 10 and p[10] else "À convenir avec le vendeur"
+            )
 
-        users_global = lire_utilisateurs()
-
-        if role_actuel == "Acheteur":
-            correspondants = [u for u, d in users_global.items() if d.get("role") == "Vendeur"]
-        else:
-            correspondants = [u for u, d in users_global.items() if u != user_actuel]
-
-        if not correspondants:
-            st.info("Aucun correspondant disponible pour le moment.")
-        else:
-            index_defaut = 0
-            if st.session_state["chat_actif"] in correspondants:
-                index_defaut = correspondants.index(st.session_state["chat_actif"])
-
-            destinataire_choisi = st.selectbox("Choisir un interlocuteur :", correspondants, index=index_defaut)
-            st.session_state["chat_actif"] = destinataire_choisi
-
-            st.write("---")
-            st.subheader(f"Conversation avec : **{destinataire_choisi}**")
-
-            tous_messages = lire_messages()
-            messages_conversation = [
-                m for m in tous_messages
-                if (m["exp"] == user_actuel and m["dest"] == destinataire_choisi) or
-                   (m["exp"] == destinataire_choisi and m["dest"] == user_actuel)
-            ]
-
-            chat_container = st.container()
-            with chat_container:
-                if not messages_conversation:
-                    st.info("Aucun message échangé pour l'instant. Envoyez le premier message ci-dessous !")
+            if (
+                recherche.lower() in nom_p.lower()
+                or recherche.lower() in boutique_vendeur.lower()
+                or recherche.lower() in commune_p.lower()
+            ):
+              col_img, col_details = st.columns([1, 2])
+              with col_img:
+                if img_p and os.path.exists(img_p):
+                  st.image(img_p, width=180)
                 else:
-                    for msg in messages_conversation:
-                        if msg["exp"] == user_actuel:
-                            st.markdown(f"""
-                                <div style="text-align: right; margin-bottom: 8px;">
-                                    <span style="background-color: #2b6cb0; color: white; padding: 8px 12px; border-radius: 10px; display: inline-block; max-width: 70%; text-align: left;">
-                                        <b>Moi :</b> {msg['texte']}<br><sub style="font-size: 9px; opacity: 0.8;">{msg['date']}</sub>
-                                    </span>
-                                </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"""
-                                <div style="text-align: left; margin-bottom: 8px;">
-                                    <span style="background-color: #e2e8f0; color: #000; padding: 8px 12px; border-radius: 10px; display: inline-block; max-width: 70%;">
-                                        <b>{msg['exp']} :</b> {msg['texte']}<br><sub style="font-size: 9px; color: #555;">{msg['date']}</sub>
-                                    </span>
-                                </div>
-                            """, unsafe_allow_html=True)
+                  st.info("📷 Pas d'image")
+              with col_details:
+                st.markdown(f"### 📦 {nom_p} ({prix_p} $)")
+                st.write(
+                    f"🏭 **Fournisseur :** {boutique_vendeur} | 📂"
+                    f" **Catégorie :** {cat_p}"
+                )
+                st.write(
+                    f"📍 **Adresse :** Ville de {ville_p}, Commune de"
+                    f" {commune_p}"
+                )
+                st.write(
+                    f"📦 **Stock :** {stock_p} pcs | ⚡ **MOQ :** {moq_p} pcs"
+                )
+                st.write(f"🚚 **Livraison :** {livraison_p}")
+                st.write(f"📝 {desc_p}")
 
-            st.write("")
-            with st.form("form_envoi_message", clear_on_submit=True):
-                texte_message = st.text_input("Votre message...", placeholder="Écrivez votre message ici...")
-                btn_envoyer = st.form_submit_button("Envoyer 📤")
-                if btn_envoyer:
-                    if texte_message.strip():
-                        sauvegarder_message(user_actuel, destinataire_choisi, texte_message.strip())
-                        st.rerun()
-                    else:
-                        st.warning("Le message ne peut pas être vide.")
+                if st.button(
+                    f"💬 Contacter le fournisseur ({boutique_vendeur})",
+                    key=f"chat_connecte_{boutique_vendeur}_{nom_p}",
+                ):
+                  date_str = datetime.now().strftime("%d/%m %H:%M")
+                  msg_automatique = (
+                      f"Bonjour, je suis intéressé par votre produit '{nom_p}'"
+                      f" affiché à {prix_p}$."
+                  )
+                  if not os.path.exists(FICHIER_MESSAGES):
+                    open(FICHIER_MESSAGES, "w").close()
 
-# ==========================================
-# 4. PUBLIER UN PRODUIT (RESERVÉ AUX VENDEURS)
-# ==========================================
-elif page == "➕ Publier un Produit":
-    st.header("➕ Publier un article & Gérer sa Boutique")
+                  with open(FICHIER_MESSAGES, "a", encoding="utf-8") as f_m:
+                    f_m.write(
+                        f"{user_info['user']};{boutique_vendeur};{user_info['user']};{msg_automatique};{date_str}\n"
+                    )
 
-    if st.session_state["role_connecte"] != "Vendeur":
-        st.error("⛔ Accès refusé. Vous devez vous connecter avec un compte Vendeur pour publier des articles.")
+                  st.session_state.chat_actif = boutique_vendeur
+                  st.success(
+                      f"Redirection vers la messagerie avec {boutique_vendeur}..."
+                  )
+                  st.rerun()
+              st.markdown("---")
+
+  # --- ESPACE MESSENGER ---
+  elif menu_principal == "💬 Messenger":
+    st.title("💬 Messagerie Directe (Style Messenger)")
+    if not os.path.exists(FICHIER_MESSAGES):
+      open(FICHIER_MESSAGES, "w").close()
+
+    if user_info["role"] == "Fournisseur":
+      acheteurs_dispos = set()
+      with open(FICHIER_MESSAGES, "r", encoding="utf-8") as f:
+        for ligne in f:
+          m = ligne.strip().split(";")
+          if len(m) >= 4 and m[1] == user_info["boutique"]:
+            acheteurs_dispos.add(m[0])
+
+      if not acheteurs_dispos:
+        st.info("📭 Aucune discussion pour le moment.")
+      else:
+        liste_ach = list(acheteurs_dispos)
+        if (
+            "chat_actif_f" not in st.session_state
+            or st.session_state.chat_actif_f not in liste_ach
+        ):
+          st.session_state.chat_actif_f = liste_ach[0]
+
+        col_l, col_c = st.columns([1, 2], gap="medium")
+        with col_l:
+          st.markdown("#### 📥 Clients")
+          for ach in liste_ach:
+            if st.button(f"👤 {ach}", key=f"b_ach_{ach}", use_container_width=True):
+              st.session_state.chat_actif_f = ach
+              st.rerun()
+
+        with col_c:
+          client_choisi = st.session_state.chat_actif_f
+          st.markdown(f"#### 💬 Discussion avec : {client_choisi}")
+          chat_container = st.container(height=350)
+          with chat_container:
+            with open(FICHIER_MESSAGES, "r", encoding="utf-8") as f:
+              for ligne in f:
+                m = ligne.strip().split(";")
+                if (
+                    len(m) >= 5
+                    and m[1] == user_info["boutique"]
+                    and m[0] == client_choisi
+                ):
+                  exp, txt, dt = m[2], m[3], m[4]
+                  align = "flex-end" if exp == user_info["user"] else "flex-start"
+                  bg = "#0084ff" if exp == user_info["user"] else "#e4e6eb"
+                  color = "white" if exp == user_info["user"] else "black"
+                  st.markdown(
+                      f"<div style='display: flex; justify-content: {align};"
+                      f" margin-bottom: 8px;'><div style='background-color:"
+                      f" {bg}; color: {color}; padding: 10px 14px; border-radius:"
+                      f" 15px; max-width: 75%;'>{txt}<div style='font-size:"
+                      f" 9px; text-align: right; opacity: 0.7;'>{dt}</div></div></div>",
+                      unsafe_allow_html=True,
+                  )
+
+          with st.form(key=f"form_f_{client_choisi}", clear_on_submit=True):
+            msg = st.text_input("Message...", label_visibility="collapsed")
+            if st.form_submit_button("Envoyer 🚀") and msg:
+              dt_str = datetime.now().strftime("%d/%m %H:%M")
+              with open(FICHIER_MESSAGES, "a", encoding="utf-8") as f:
+                f.write(
+                    f"{client_choisi};{user_info['boutique']};{user_info['user']};{msg};{dt_str}\n"
+                )
+              st.rerun()
     else:
-        nom_boutique_actuelle = st.session_state["boutique_connecte"] if st.session_state[
-            "boutique_connecte"] else "Ma Boutique"
+      boutiques_contactees = set()
+      with open(FICHIER_MESSAGES, "r", encoding="utf-8") as f:
+        for ligne in f:
+          m = ligne.strip().split(";")
+          if len(m) >= 4 and m[0] == user_info["user"]:
+            boutiques_contactees.add(m[1])
 
-        with st.form("form_pub"):
-            nom = st.text_input("Nom de l'article")
-            boutique = st.text_input("Boutique", value=nom_boutique_actuelle)
-            quartier = st.selectbox("Commune / Zone de Kisangani",
-                                    ["Makiso", "Tshopo", "Mangobo", "Kabondo", "Lubunga", "Kisangani (Centre)"])
-            phone = st.text_input("Numéro WhatsApp (+243...)")
-            prix = st.number_input("Prix (FC)", min_value=100, step=500)
-            stock = st.number_input("Stock disponible", min_value=1, step=1)
-            categorie = st.selectbox("Catégorie", ["Électronique", "Alimentation", "Vêtements", "Artisanat", "Divers"])
+      if not boutiques_contactees:
+        st.info("ℹ️ Aucune conversation en cours.")
+      else:
+        liste_bq = list(boutiques_contactees)
+        if (
+            not st.session_state.chat_actif
+            or st.session_state.chat_actif not in liste_bq
+        ):
+          st.session_state.chat_actif = liste_bq[0]
 
-            st.write("---")
-            st.markdown("📷 **Photo de l'article :**")
-            image_file = st.file_uploader("Sélectionner l'image de l'article", type=["png", "jpg", "jpeg"],
-                                          key="img_art")
+        col_l, col_c = st.columns([1, 2], gap="medium")
+        with col_l:
+          st.markdown("#### 🏭 Boutiques")
+          for bq in liste_bq:
+            if st.button(f"🏢 {bq}", key=f"b_bq_{bq}", use_container_width=True):
+              st.session_state.chat_actif = bq
+              st.rerun()
 
-            if st.form_submit_button("🚀 Publier l'Annonce"):
-                if nom.strip():
-                    img_path = ""
-                    if image_file:
-                        img_path = os.path.join(DOSSIER_IMAGES,
-                                                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{image_file.name}")
-                        with open(img_path, "wb") as f:
-                            f.write(image_file.getbuffer())
+        with col_c:
+          bq_choisie = st.session_state.chat_actif
+          st.markdown(f"#### 💬 Discussion avec : {bq_choisie}")
+          chat_container = st.container(height=350)
+          with chat_container:
+            with open(FICHIER_MESSAGES, "r", encoding="utf-8") as f:
+              for ligne in f:
+                m = ligne.strip().split(";")
+                if (
+                    len(m) >= 5
+                    and m[0] == user_info["user"]
+                    and m[1] == bq_choisie
+                ):
+                  exp, txt, dt = m[2], m[3], m[4]
+                  align = "flex-end" if exp == user_info["user"] else "flex-start"
+                  bg = "#0084ff" if exp == user_info["user"] else "#e4e6eb"
+                  color = "white" if exp == user_info["user"] else "black"
+                  st.markdown(
+                      f"<div style='display: flex; justify-content: {align};"
+                      f" margin-bottom: 8px;'><div style='background-color:"
+                      f" {bg}; color: {color}; padding: 10px 14px; border-radius:"
+                      f" 15px; max-width: 75%;'>{txt}<div style='font-size:"
+                      f" 9px; text-align: right; opacity: 0.7;'>{dt}</div></div></div>",
+                      unsafe_allow_html=True,
+                  )
 
-                    sauvegarder_produit(nom.strip(), prix, stock, categorie, boutique, quartier, phone, img_path)
-                    st.success("Article publié avec succès !")
-                else:
-                    st.warning("Veuillez saisir un nom d'article.")
+          with st.form(key=f"form_a_{bq_choisie}", clear_on_submit=True):
+            msg = st.text_input("Message...", label_visibility="collapsed")
+            if st.form_submit_button("Envoyer 🚀") and msg:
+              dt_str = datetime.now().strftime("%d/%m %H:%M")
+              with open(FICHIER_MESSAGES, "a", encoding="utf-8") as f:
+                f.write(
+                    f"{user_info['user']};{bq_choisie};{user_info['user']};{msg};{dt_str}\n"
+                )
+              st.rerun()
 
-# ==========================================
-# 5. BILAN ET GRAPHIQUES (RESERVÉ AUX VENDEURS)
-# ==========================================
-elif page == "📊 Bilan & Graphiques Ventes":
-    st.header("📊 Bilan & Suivi Financier Vendeur")
+  # --- ESPACE GÉRER MES PRODUITS (FOURNISSEUR SEULEMENT) ---
+  elif (
+      menu_principal == "📦 Gérer mes produits"
+      and user_info["role"] == "Fournisseur"
+  ):
+    st.title(f"📦 Tableau de bord Fournisseur - {user_info['boutique']}")
+    tab1, tab2 = st.tabs(["➕ Publier un Produit", "📋 Mon Catalogue"])
 
-    if st.session_state["role_connecte"] != "Vendeur":
-        st.error("⛔ Accès restreint aux vendeurs.")
-    else:
-        total_ca = 0
-        ventes_data = []
+    with tab1:
+      with st.form("form_pub_prod"):
+        nom_prod = st.text_input("Nom du produit")
+        cat = st.selectbox(
+            "Catégorie",
+            [
+                "Électronique & High-Tech",
+                "Mode & Vêtements",
+                "Alimentation & Vivres",
+                "Matériaux & Divers",
+            ],
+        )
+        prix = st.number_input("Prix unitaire (USD)", min_value=0.0, step=10.0)
+        stock = st.number_input("Stock disponible", min_value=1, step=1)
+        qte_min = st.number_input("MOQ (Minimum de commande)", min_value=1, value=1)
+        ville_prod = st.text_input("Ville", value=user_info["ville"])
+        commune_prod = st.text_input("Commune", value=user_info["commune"])
+        livraison = st.text_input("Détails de livraison & Frais")
+        desc = st.text_area("Description détaillée")
+        img_file = st.file_uploader(
+            "Photo du produit", type=["png", "jpg", "jpeg"]
+        )
 
-        if os.path.exists(FICHIER_VENTES):
-            with open(FICHIER_VENTES, "r", encoding="utf-8") as f:
-                for line in f:
-                    if "Total :" in line:
-                        parts = line.strip().split(" | ")
-                        date_val = parts[0].split("]")[0].replace("[", "").split()[0]
-                        art_val = [p for p in parts if "Article :" in p][0].split(":")[1].strip()
-                        m_val = [p for p in parts if "Total :" in p][0].split(":")[1].replace("FC", "").strip()
-                        if m_val.isdigit():
-                            montant = int(m_val)
-                            total_ca += montant
-                            ventes_data.append({"Date": date_val, "Article": art_val, "Montant": montant})
+        if st.form_submit_button("Publier l'offre"):
+          img_path = ""
+          if img_file:
+            if not os.path.exists(DOSSIER_PRODUITS):
+              os.makedirs(DOSSIER_PRODUITS)
+            img_path = os.path.join(
+                DOSSIER_PRODUITS,
+                f"prod_{user_info['boutique']}_{img_file.name}",
+            )
+            with open(img_path, "wb") as f:
+              f.write(img_file.getbuffer())
 
-        col_s1, col_s2 = st.columns(2)
-        with col_s1:
-            st.metric("Chiffre d'Affaires Total", f"{total_ca:,} FC".replace(",", " "))
-        with col_s2:
-            st.metric("Nombre total de ventes", f"{len(ventes_data)}")
+          ligne = f"{user_info['boutique']};{nom_prod};{cat};{prix};{stock};{qte_min};{desc};{img_path};{ville_prod};{commune_prod};{livraison}\n"
+          with open(FICHIER_PRODUITS, "a", encoding="utf-8") as f:
+            f.write(ligne)
+          st.success("🎉 Produit publié avec succès !")
 
-        st.write("---")
+    with tab2:
+      st.subheader("Vos articles en ligne")
+      if os.path.exists(FICHIER_PRODUITS):
+        with open(FICHIER_PRODUITS, "r", encoding="utf-8") as f:
+          lignes_produits = f.readlines()
 
-        if ventes_data:
-            st.subheader("📈 Graphique des Ventes par Article")
-            df_ventes = pd.DataFrame(ventes_data)
-            chart_data = df_ventes.groupby("Article")["Montant"].sum().reset_index()
-            st.bar_chart(chart_data.set_index("Article"))
-        else:
-            st.info("Aucune donnée de vente enregistrée pour le moment.")
+        for ligne in lignes_produits:
+          p = ligne.strip().split(";")
+          if len(p) >= 8 and p[0] == user_info["boutique"]:
+            nom_p, prix_p, stock_p, moq_p, img_p = (
+                p[1],
+                p[3],
+                p[4],
+                p[5],
+                p[7],
+            )
+            ville_p = p[8] if len(p) > 8 and p[8] else "Kisangani"
+            commune_p = p[9] if len(p) > 9 and p[9] else "Non spécifiée"
+
+            st.write(f"### {nom_p} - {prix_p} $")
+            if img_p and os.path.exists(img_p):
+              st.image(img_p, width=120)
+            st.write(
+                f"Stock : {stock_p} | MOQ : {moq_p} | Ville : {ville_p},"
+                f" Commune : {commune_p}"
+            )
+            st.markdown("---")
