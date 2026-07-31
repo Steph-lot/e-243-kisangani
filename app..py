@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import pandas as pd
 import streamlit as st
 
 # Configuration de la page
@@ -25,7 +26,6 @@ st.markdown(
 DOSSIER_PROFILS = "profils_images"
 DOSSIER_PRODUITS = "produits_images"
 DOSSIER_STORIES = "stories_images"
-FICHIER_UTILISATEURS = "utilisateurs.txt"
 FICHIER_PRODUITS = "catalogue_fournisseurs.txt"
 FICHIER_MESSAGES = "messages.txt"
 FICHIER_STORIES = "stories.txt"
@@ -85,35 +85,47 @@ TRADUCTIONS = {
 
 # --- FONCTIONS DE GESTION ---
 def charger_utilisateurs():
+  conn = st.connection("gsheets", type="GSheetsConnection")
+  df = conn.read(worksheet="utilisateurs", ttl=0)
   utilisateurs = {}
-  if not os.path.exists(FICHIER_UTILISATEURS):
-    return utilisateurs
-  with open(FICHIER_UTILISATEURS, "r", encoding="utf-8") as f:
-    for ligne in f:
-      p = ligne.strip().split(";")
-      if len(p) >= 2:
-        utilisateurs[p[0]] = {
-            "user": p[0],
-            "mdp": p[1],
-            "role": p[2] if len(p) > 2 else "Acheteur",
-            "boutique": p[3] if len(p) > 3 else "",
-            "phone": p[4] if len(p) > 4 else "",
-            "gmail": p[5] if len(p) > 5 else "",
-            "profil_path": p[6] if len(p) > 6 else "",
-            "ref_om": p[7] if len(p) > 7 else "",
-            "ville": p[8] if len(p) > 8 and p[8] else "Kisangani",
-            "commune": p[9] if len(p) > 9 and p[9] else "Non spécifiée",
-            "langue": p[10] if len(p) > 10 and p[10] else "Français",
-        }
+  for _, row in df.iterrows():
+    user = str(row.get("user", ""))
+    if user and user != "nan":
+      utilisateurs[user] = {
+          "user": user,
+          "mdp": str(row.get("mdp", "")),
+          "role": str(row.get("role", "Acheteur")),
+          "boutique": str(row.get("boutique", "")),
+          "phone": str(row.get("phone", "")),
+          "gmail": str(row.get("gmail", "")),
+          "profil_path": str(row.get("profil_path", "")),
+          "ref_om": str(row.get("ref_om", "")),
+          "ville": str(row.get("ville", "Kisangani")),
+          "commune": str(row.get("commune", "Non spécifiée")),
+          "langue": str(row.get("langue", "Français")),
+      }
   return utilisateurs
 
 
 def sauvegarder_utilisateurs(utilisateurs):
-  with open(FICHIER_UTILISATEURS, "w", encoding="utf-8") as f:
-    for u, data in utilisateurs.items():
-      f.write(
-          f"{data['user']};{data['mdp']};{data['role']};{data['boutique']};{data['phone']};{data['gmail']};{data['profil_path']};{data['ref_om']};{data['ville']};{data['commune']};{data['langue']}\n"
-      )
+  conn = st.connection("gsheets", type="GSheetsConnection")
+  data = []
+  for u, details in utilisateurs.items():
+    data.append({
+        "user": details.get("user", ""),
+        "mdp": details.get("mdp", ""),
+        "role": details.get("role", "Acheteur"),
+        "boutique": details.get("boutique", ""),
+        "phone": details.get("phone", ""),
+        "gmail": details.get("gmail", ""),
+        "profil_path": details.get("profil_path", ""),
+        "ref_om": details.get("ref_om", ""),
+        "ville": details.get("ville", "Kisangani"),
+        "commune": details.get("commune", "Non spécifiée"),
+        "langue": details.get("langue", "Français"),
+    })
+  df = pd.DataFrame(data)
+  conn.update(worksheet="utilisateurs", data=df)
 
 
 def inscrire_utilisateur(
