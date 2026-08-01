@@ -89,6 +89,13 @@ TRADUCTIONS = {
 def get_worksheet():
   scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
   creds_dict = dict(st.secrets["connections"]["gsheets"])
+  
+  # Correction robuste des sauts de ligne de la clé privée PEM
+  if "private_key" in creds_dict:
+    private_key = creds_dict["private_key"]
+    private_key = private_key.replace("\\n", "\n")
+    creds_dict["private_key"] = private_key
+
   creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
   client = gspread.authorize(creds)
   spreadsheet_url = st.secrets["connections"]["gsheets"]["url"]
