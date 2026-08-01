@@ -1,6 +1,9 @@
 from datetime import datetime
 import os
 import streamlit as st
+import gspread
+import pandas as pd
+from google.oauth2.service_account import Credentials
 
 # Configuration de la page
 st.set_page_config(
@@ -82,41 +85,54 @@ TRADUCTIONS = {
 }
 
 
-# --- FONCTIONS DE GESTION (GOOGLE SHEETS) ---
+# --- FONCTIONS DE GESTION (GOOGLE SHEETS AVEC GSPREAD) ---
+def get_worksheet():
+  scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+  creds_dict = dict(st.secrets["connections"]["gsheets"])
+  creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+  client = gspread.authorize(creds)
+  spreadsheet_url = st.secrets["connections"]["gsheets"]["url"]
+  sheet = client.open_by_url(spreadsheet_url).worksheet("utilisateurs")
+  return sheet
+
+
 def charger_utilisateurs():
-  conn = st.connection("gsheets", type="GSheetsConnection")
-  df = conn.read(worksheet="utilisateurs", ttl=0)
-  utilisateurs = {}
-  for _, row in df.iterrows():
-    user = str(row.get("user", ""))
-    if user and user != "nan":
-      utilisateurs[user] = {
-          "user": user,
-          "mdp": str(row.get("mdp", "")),
-          "role": str(row.get("role", "Acheteur")),
-          "boutique": str(row.get("boutique", "")),
-          "phone": str(row.get("phone", "")),
-          "gmail": str(row.get("gmail", "")),
-          "profil_path": str(row.get("profil_path", "")),
-          "ref_om": str(row.get("ref_om", "")),
-          "ville": str(row.get("ville", "Kisangani")),
-          "commune": str(row.get("commune", "Non spécifiée")),
-          "langue": str(row.get("langue", "Français")),
-      }
-  return utilisateurs
+  try:
+    sheet = get_worksheet()
+    data = sheet.get_all_records()
+    df = pd.DataFrame(data)
+    utilisateurs = {}
+    for _, row in df.iterrows():
+      user = str(row.get("user", ""))
+      if user and user != "nan":
+        utilisateurs[user] = {
+            "user": user,
+            "mdp": str(row.get("mdp", "")),
+            "role": str(row.get("role", "Acheteur")),
+            "boutique": str(row.get("boutique", "")),
+            "phone": str(row.get("phone", "")),
+            "gmail": str(row.get("gmail", "")),
+            "profil_path": str(row.get("profil_path", "")),
+            "ref_om": str(row.get("ref_om", "")),
+            "ville": str(row.get("ville", "Kisangani")),
+            "commune": str(row.get("commune", "Non spécifiée")),
+            "langue": str(row.get("langue", "Français")),
+        }
+    return utilisateurs
+  except Exception as e:
+    st.error(f"Erreur de chargement Google Sheets : {e}")
+    return {}
 
 
 def sauvegarder_utilisateurs(utilisateurs):
-  import pandas as pd
-
-  conn = st.connection("gsheets", type="GSheetsConnection")
-  
-  # Conversion du dictionnaire en DataFrame pour Google Sheets
-  liste_data = list(utilisateurs.values())
-  df = pd.DataFrame(liste_data)
-  
-  # Mise à jour de la feuille "utilisateurs"
-  conn.update(worksheet="utilisateurs", data=df)
+  try:
+    sheet = get_worksheet()
+    liste_data = list(utilisateurs.values())
+    df = pd.DataFrame(liste_data)
+    sheet.clear()
+    sheet.update([df.columns.values.tolist()] + df.values.tolist())
+  except Exception as e:
+    st.error(f"Erreur de sauvegarde Google Sheets : {e}")
 
 
 def inscrire_utilisateur(
