@@ -1,6 +1,5 @@
 from datetime import datetime
 import os
-import pandas as pd
 import streamlit as st
 
 # Configuration de la page
@@ -83,7 +82,7 @@ TRADUCTIONS = {
 }
 
 
-# --- FONCTIONS DE GESTION ---
+# --- FONCTIONS DE GESTION (GOOGLE SHEETS) ---
 def charger_utilisateurs():
   conn = st.connection("gsheets", type="GSheetsConnection")
   df = conn.read(worksheet="utilisateurs", ttl=0)
@@ -108,23 +107,15 @@ def charger_utilisateurs():
 
 
 def sauvegarder_utilisateurs(utilisateurs):
+  import pandas as pd
+
   conn = st.connection("gsheets", type="GSheetsConnection")
-  data = []
-  for u, details in utilisateurs.items():
-    data.append({
-        "user": details.get("user", ""),
-        "mdp": details.get("mdp", ""),
-        "role": details.get("role", "Acheteur"),
-        "boutique": details.get("boutique", ""),
-        "phone": details.get("phone", ""),
-        "gmail": details.get("gmail", ""),
-        "profil_path": details.get("profil_path", ""),
-        "ref_om": details.get("ref_om", ""),
-        "ville": details.get("ville", "Kisangani"),
-        "commune": details.get("commune", "Non spécifiée"),
-        "langue": details.get("langue", "Français"),
-    })
-  df = pd.DataFrame(data)
+  
+  # Conversion du dictionnaire en DataFrame pour Google Sheets
+  liste_data = list(utilisateurs.values())
+  df = pd.DataFrame(liste_data)
+  
+  # Mise à jour de la feuille "utilisateurs"
   conn.update(worksheet="utilisateurs", data=df)
 
 
